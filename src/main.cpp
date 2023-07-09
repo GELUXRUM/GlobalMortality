@@ -1,3 +1,37 @@
+#include "SimpleIni.h"
+#include <cctype>
+
+CSimpleIniA ini(true, false, false);
+bool makeProtected;
+
+bool GetOptionValue(std::string a_optionName, const char* a_optionValue)
+{
+	std::string lowercaseStr;
+	size_t length = std::strlen(a_optionValue);
+	for (size_t i = 0; i < length; ++i) {
+		lowercaseStr += static_cast<char>(std::tolower(static_cast<unsigned char>(a_optionValue[i])));
+	}
+
+	if (lowercaseStr == "true") {
+		return true;
+	} else if (lowercaseStr == "false") {
+		return false;
+	} else {
+		logger::warn("Invalid value passed to {}. Defaulting to false", a_optionName);
+		return false;
+	}
+}
+
+void LoadConfigs()
+{
+	ini.LoadFile("Data\\F4SE\\Plugins\\GLXRM_GlobalMortality.ini");
+
+	auto protectedOptionValue = ini.GetValue("General", "MakeProtected", "false");
+	makeProtected = GetOptionValue("MakeProtected", protectedOptionValue);
+
+	ini.Reset();
+}
+
 void GameDataListener(F4SE::MessagingInterface::Message* thing)
 {
 	std::vector<RE::TESActorBase*> abArray;
@@ -12,9 +46,17 @@ void GameDataListener(F4SE::MessagingInterface::Message* thing)
 
 			for (auto currentActorBase : abArray) {
 				currentActorBase->actorData.actorBaseFlags.reset(RE::ACTOR_BASE_DATA::Flag::kEssential);
+				if (makeProtected) {
+					currentActorBase->actorData.actorBaseFlags.set(RE::ACTOR_BASE_DATA::Flag::kProtected);
+				}
 			}
-
-			logger::warn("{} NPCs have been made mortal", abArray.size());
+			
+			if (makeProtected) {
+				logger::warn("{} NPCs have had their Essential flag replaced with the Protected flag", abArray.size());
+			} else {
+				logger::warn("{} NPCs have had their Essential flag removed", abArray.size());
+			}
+			
 		}
 	}
 
@@ -68,6 +110,8 @@ extern "C" DLLEXPORT bool F4SEAPI F4SEPlugin_Query(const F4SE::QueryInterface* a
 extern "C" DLLEXPORT bool F4SEAPI F4SEPlugin_Load(const F4SE::LoadInterface* a_f4se)
 {
 	F4SE::Init(a_f4se);
+
+	LoadConfigs();
 
 	F4SE::GetMessagingInterface()->RegisterListener(GameDataListener);
 
